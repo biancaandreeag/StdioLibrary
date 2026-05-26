@@ -1,67 +1,127 @@
-Implementarea bibliotecii stdio s-a facut la baza urmatoarei structuri SO_FILE:
- 
-typedef struct{
-    int fd; -->file descriptorul fisierului
-    char mode[2]; --> modul in care fisierul se doreste a fi deschis
-    char buffer[BUFF_SIZE]; --> bufferul pentru operatiile de scriere/citire
-    int buffer_size; --> dimensiunea efectiva a continutului din buffer
-    int cursor; --> pozitia din fisier
-    int error; -->flag pentru eroare
-    int current_buffer_pos; -->pozitia din buffer
-    int endOfFile; --> flag pentru finalul fisierului
-    int flag_op; --> ultima operatie efectuata pe fisier
-    pid_t childPid; --> pid ul procesului copil
+> _Academic project developed as part of a course at university._
+# Bibliotecă stdio personalizată (SO_FILE)
+
+Reimplementare în C a unei părți din biblioteca standard `stdio.h`, folosită pentru operații pe fișiere prin buffering.
+
+## Structura `SO_FILE`
+
+```c
+typedef struct {
+    int   fd;                  // file descriptor-ul fișierului
+    char  mode[2];             // modul de deschidere ("r", "w", "a", etc.)
+    char  buffer[BUFF_SIZE];   // buffer pentru citire / scriere
+    int   buffer_size;         // dimensiunea efectivă a datelor din buffer
+    int   cursor;              // poziția curentă în fișier
+    int   error;               // flag de eroare
+    int   current_buffer_pos;  // poziția curentă în buffer
+    int   endOfFile;           // flag pentru EOF
+    int   flag_op;             // ultima operație efectuată (vezi mai jos)
+    pid_t childPid;            // PID-ul procesului copil (pentru popen/pclose)
 } SO_FILE;
+```
 
-Pentru 'int flag_op', am definit urmatoarele:
-#define OP 0 --> utilizat pentru a marca orice alta operatie in afara de READ si WRITE.
-#define READ_OP 1
-#define WRITE_OP 2
+### Constante pentru `flag_op`
 
-1.SO_FILE *so_fopen(const char *pathname, const char *mode);
-Rolul functiei so_fopen este de a popula practic tipul de date SO_FILE cu toate informatiile necesare pentru imitarea comportamentului de deschidere de fisier.Aceasta deschide un fisier in modul specificat, in cazul unei erori
-returneaza NULL, dar daca deschiderea s-a efectuat cu succes populeaza structura SO_FILE alocata dinamic cu toate informatiile detinute si initializeaza restul variabilelor cu 0 pentru evitarea erorilor.
+| Macro       | Valoare | Semnificație                                    |
+| ----------- | :-----: | ----------------------------------------------- |
+| `OP`        |   `0`   | Orice altă operație în afară de READ și WRITE   |
+| `READ_OP`   |   `1`   | Ultima operație a fost de citire                |
+| `WRITE_OP`  |   `2`   | Ultima operație a fost de scriere               |
 
-2.int so_fclose(SO_FILE *stream);
-Similar functiei so_fopen, so_fclose se ocupa cu eliberarea resurselor ocupate de pointerul stream.Pentru a evita pierderea de date, daca operatia ulterioara a fost una de citire, se apeleaza functia so_fflush pentru a ne
-asigura ca datele din buffer sunt scrise in fisier inainte de inchiderea acestuia.Functia returneaza 0 in cazul in care toate aceste operatii s-au efectuat cu succes.
+---
 
-3.int so_fgetc(SO_FILE *stream);
-Functia so_fgetc citeste cate un singur caracter din fisier folosindu-se de buffer.Daca bufferul este gol sau daca s-a ajuns la finalul acestuia,acesta se intializeaza cu 0 si se citeste un nou set de date din fisier(daca este posibil).Se incrementeaza variabilele necesare pentru a indica
-pozitia curenta atat din buffer, cat si din fisier.Valoarea returnata este convertita la unsigned char pentru a ne asigura ca se intoarce valoarea corecta a caracterului pe care ne dorim sa il citim.
+## API
 
-4.int so_fputc(int c, SO_FILE *stream);
-Functia so_fputc scrie cate un singur caracter in bufferul asociat fisierului.Daca bufferul este plin, se efectueaza o operatie de so_fflush pentru a fi eliberat ca sa fie posibila scrierea in el.Se incrementeaza valorile necesare pentru a se cunoaste pozitia in buffer si in fisier.
+### 1. `SO_FILE *so_fopen(const char *pathname, const char *mode);`
+Deschide fișierul în modul specificat și alocă dinamic o structură `SO_FILE`, populând-o cu informațiile necesare (fd, mod, cursor, etc.) și inițializând restul câmpurilor cu `0`.
 
-5.size_t so_fread(void *ptr, size_t size, size_t nmeb, SO_FILE *stream);
-Functia so_fread utilizeaza functia so_fgetc pentru a citi octet cu octet un anumit numar de caractere din fisier.Folosim cele doua bucle for pentru a ne asigura ca informatia este citita corect (prima bucla se asigura ca se citesc exact numarul dorit de elemente, iar cea de 
-a doua bucla se asigura ca sunt cititi toti octetii necesari pentru fiecare element in parte).
+**Returnează:** pointer către `SO_FILE` la succes, `NULL` la eroare.
 
-6.size_t so_fwrite(const void *ptr, size_t size, size_t nmeb, SO_FILE *stream);
-Similar functiei so_fread,so_fwrite utilizeaza functia so_fputc pentru a scrie in fisier.Aceasta preia la fiecare iteratie cate un octet din ptr si il scrie in buffer ul asociat streamului fisierului.
+---
 
-7.int so_fseek(SO_FILE *stream, long offset,int whence);
-Functia so_fseek se ocupa cu deplasarea cursorului in fisier.
-Daca ultima operatie efectuata a fost de scriere, se realizeaza sincronizarea datelor.Daca ultima operatie efectuata a fost de citire, bufferul este resetat, implicit 
-si pozitia curenta din acesta.Cursorul este setat la pozitia dorita cu ajutorul functiei lseek.
+### 2. `int so_fclose(SO_FILE *stream);`
+Eliberează resursele asociate `stream`-ului. Dacă ultima operație a fost de **scriere**, apelează `so_fflush` pentru a goli bufferul în fișier înainte de închidere, evitând pierderea de date.
 
-8.long so_ftell(SO_FILE *stream);
-Utilizeaza functia so_fseek pentru a returna pozitia curenta
-a cursorului.
+**Returnează:** `0` la succes.
 
-9.int so_fflush(SO_FILE *stream);
-In cazul in care ultima operatie din fisier a fost de scriere, functia 'forteaza' scrierea in fisier a informatiilor din buffer si apoi il golesc si reseteaza
-variabilele asociate cu acestea.
+---
 
-10.SO_FILE *so_popen(const char *command, const char *type);
-Se utilizeaza un proces copil pentru a se executa comanda
-dorita, se creaza un canal prin care procesul copil si parinte vor comunica.Daca se specifica tipul 'r' (citire), stdin-ul procesului copil este redirectionat din canalul creat, astfel incat datele scrise de parinte in canal vor fi citite de procesul copil ca si cum ar fi fost introduse de la tastatura.Daca se specifica tipul 'w' (scriere), stdout-ul procesului copil este redirectionat catre canal, astfel incat datele scrise de procesul copil în stdout vor fi disponibile pentru citire.
+### 3. `int so_fgetc(SO_FILE *stream);`
+Citește un singur caracter folosind bufferul intern. Dacă bufferul e gol sau s-a ajuns la finalul lui, se reinițializează și se citește un nou bloc din fișier. Actualizează pozițiile în buffer și în fișier.
 
-11.int so_pclose(SO_FILE *stream);
-Functia so_pclose utilizeaza functia so_close pentru a elibera toate resursele asociate fisierului salvat in SO_FILE si apoi se asigura ca procesul copil isi termina
-executia corespunzator si returneaza statusul sau de terminare.
+**Returnează:** caracterul ca `unsigned char` (pentru a evita semn negativ pe valori > 127), `SO_EOF` la eroare/EOF.
 
+---
 
+### 4. `int so_fputc(int c, SO_FILE *stream);`
+Scrie un caracter în bufferul asociat fișierului. Dacă bufferul e plin, declanșează `so_fflush` pentru a-l elibera. Actualizează pozițiile în buffer și fișier.
 
+**Returnează:** caracterul scris la succes, `SO_EOF` la eroare.
 
+---
 
+### 5. `size_t so_fread(void *ptr, size_t size, size_t nmemb, SO_FILE *stream);`
+Citește `nmemb` elemente a câte `size` octeți folosind `so_fgetc` octet cu octet.
+- Bucla exterioară parcurge cele `nmemb` elemente.
+- Bucla interioară citește cei `size` octeți ai fiecărui element.
+
+**Returnează:** numărul de elemente citite cu succes.
+
+---
+
+### 6. `size_t so_fwrite(const void *ptr, size_t size, size_t nmemb, SO_FILE *stream);`
+Simetric cu `so_fread`. Scrie `nmemb * size` octeți în buffer prin `so_fputc`.
+
+**Returnează:** numărul de elemente scrise cu succes.
+
+---
+
+### 7. `int so_fseek(SO_FILE *stream, long offset, int whence);`
+Mută cursorul în fișier.
+- Dacă ultima operație a fost **WRITE** → se face flush pentru sincronizarea datelor.
+- Dacă ultima operație a fost **READ** → bufferul și poziția în el se resetează.
+- Poziționarea efectivă se face cu `lseek`.
+
+**Returnează:** `0` la succes, `-1` la eroare.
+
+---
+
+### 8. `long so_ftell(SO_FILE *stream);`
+Returnează poziția curentă a cursorului în fișier, folosind `so_fseek` cu `SEEK_CUR` și offset `0`.
+
+---
+
+### 9. `int so_fflush(SO_FILE *stream);`
+Dacă ultima operație a fost de **scriere**, forțează scrierea conținutului bufferului în fișier, apoi golește bufferul și resetează variabilele asociate.
+
+**Returnează:** `0` la succes.
+
+---
+
+### 10. `SO_FILE *so_popen(const char *command, const char *type);`
+Pornește un proces copil care execută comanda dată și creează un pipe pentru comunicarea părinte–copil.
+
+| `type` | Comportament                                                                                       |
+| :----: | -------------------------------------------------------------------------------------------------- |
+|  `r`   | `stdin` în copil e redirectat din pipe — copilul citește ce scrie părintele                        |
+|  `w`   | `stdout` în copil e redirectat în pipe — părintele citește ce scrie copilul                        |
+
+PID-ul copilului e salvat în `childPid` pentru a fi așteptat ulterior.
+
+---
+
+### 11. `int so_pclose(SO_FILE *stream);`
+Eliberează resursele cu `so_fclose`, apoi așteaptă terminarea procesului copil (`waitpid`).
+
+**Returnează:** statusul de terminare al procesului copil.
+
+---
+
+## Note de implementare
+
+- Toate operațiile sunt **buffered** — datele trec prin `buffer[BUFF_SIZE]` înainte de a ajunge la `read(2)` / `write(2)`.
+- Câmpul `flag_op` permite detectarea trecerii citire → scriere (și invers), pentru a face flush sau a invalida bufferul.
+- Citirea returnează `unsigned char` pentru a nu confunda octeții cu valoarea negativă `EOF`.
+- `so_popen` / `so_pclose` folosesc `fork(2)` + `execlp(2)` + `pipe(2)` + `dup2(2)`.
+
+---
