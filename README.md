@@ -1,4 +1,5 @@
 > _Academic project developed as part of a  university course._
+___
 # Bibliotecă stdio personalizată (SO_FILE)
 
 Reimplementare în C a unei părți din biblioteca standard `stdio.h`, folosită pentru operații pe fișiere prin buffering.
